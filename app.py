@@ -19,7 +19,7 @@ from io import BytesIO
 # Page must be configured before any other st.* call.
 st.set_page_config(
     page_title="CensorForge — PII Redaction Tool",
-    page_icon="🛡️",
+    page_icon="🕵️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -147,7 +147,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Main content
 # ---------------------------------------------------------------------------
-st.markdown('<div class="hero-title">🛡️ CensorForge</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">🕵️ CensorForge</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="hero-subtitle">Upload a <code>.docx</code> document and '
     "automatically redact PII with realistic fake data.</div>",
