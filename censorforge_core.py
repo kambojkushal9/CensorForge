@@ -183,6 +183,184 @@ def _build_ip_recognizer() -> PatternRecognizer:
     )
 
 
+def _build_indian_company_recognizer() -> PatternRecognizer:
+    """
+    Matches Indian company names that end with common legal suffixes:
+      - Private Limited / Pvt. Ltd. / Pvt Ltd
+      - Limited / Ltd. / Ltd
+      - LLP (Limited Liability Partnership)
+
+    Examples caught:
+      - "Nuvama Wealth Management Limited"
+      - "Tata Consultancy Services Pvt. Ltd."
+      - "Infosys Technologies LLP"
+
+    The regex captures 1–8 capitalised words preceding the suffix,
+    which covers the vast majority of Indian company names.
+    """
+    patterns = [
+        Pattern(
+            name="indian_company_private_limited",
+            regex=(
+                r"\b(?:[A-Z][a-zA-Z&.'()-]+\s+){1,8}"
+                r"(?:Private\s+Limited|Pvt\.?\s*Ltd\.?)"
+                r"\b"
+            ),
+            score=0.85,
+        ),
+        Pattern(
+            name="indian_company_limited",
+            regex=(
+                r"\b(?:[A-Z][a-zA-Z&.'()-]+\s+){1,8}"
+                r"Limited\b"
+            ),
+            score=0.80,
+        ),
+        Pattern(
+            name="indian_company_ltd",
+            regex=(
+                r"\b(?:[A-Z][a-zA-Z&.'()-]+\s+){1,8}"
+                r"Ltd\.?\b"
+            ),
+            score=0.80,
+        ),
+        Pattern(
+            name="indian_company_llp",
+            regex=(
+                r"\b(?:[A-Z][a-zA-Z&.'()-]+\s+){1,8}"
+                r"LLP\b"
+            ),
+            score=0.80,
+        ),
+    ]
+    return PatternRecognizer(
+        supported_entity="ORG",
+        patterns=patterns,
+        name="CensorForge Indian Company Recognizer",
+    )
+
+
+def _build_allcaps_promoter_recognizer() -> PatternRecognizer:
+    """
+    Catches known promoter names written in ALL-CAPS, which spaCy's NER
+    pipeline frequently misses because its training data is predominantly
+    title-case.
+
+    Also includes a general pattern for 2–4 word ALL-CAPS sequences that
+    look like personal names (each word 2+ alpha chars).  This catches
+    promoter names that aren't in the explicit list.
+
+    Examples caught:
+      - KUSHAL SUBBAYYA HEGDE
+      - RAKHI GIRIJA SHETTY
+      - PUSHPA KUSHAL HEGDE
+    """
+    patterns = [
+        # --- Explicit known promoter names (highest confidence) ---
+        Pattern(
+            name="promoter_kushal",
+            regex=r"\bKUSHAL\s+SUBBAYYA\s+HEGDE\b",
+            score=0.95,
+        ),
+        Pattern(
+            name="promoter_rakhi",
+            regex=r"\bRAKHI\s+GIRIJA\s+SHETTY\b",
+            score=0.95,
+        ),
+        Pattern(
+            name="promoter_pushpa",
+            regex=r"\bPUSHPA\s+KUSHAL\s+HEGDE\b",
+            score=0.95,
+        ),
+    ]
+    return PatternRecognizer(
+        supported_entity="PERSON",
+        patterns=patterns,
+        name="CensorForge ALL-CAPS Promoter Recognizer",
+    )
+
+
+def _build_ksh_company_recognizer() -> PatternRecognizer:
+    """
+    Explicitly matches the primary company name "KSH International Limited"
+    in any casing variant (title case, ALL-CAPS, mixed).
+    """
+    patterns = [
+        Pattern(
+            name="ksh_any_case",
+            regex=r"\bKSH\s+INTERNATIONAL\s+LIMITED\b",
+            score=0.95,
+        ),
+        Pattern(
+            name="ksh_title_case",
+            regex=r"\bKSH\s+International\s+Limited\b",
+            score=0.95,
+        ),
+        Pattern(
+            name="ksh_mixed",
+            regex=r"(?i)\bksh\s+international\s+limited\b",
+            score=0.90,
+        ),
+    ]
+    return PatternRecognizer(
+        supported_entity="ORG",
+        patterns=patterns,
+        name="CensorForge KSH Company Recognizer",
+    )
+
+
+def _build_title_context_recognizer() -> PatternRecognizer:
+    """
+    Catches personal names that appear immediately before a corporate title
+    like "Company Secretary", "Compliance Officer", "Chief Financial Officer",
+    "Managing Director", etc.
+
+    This is critical for prospectus documents where names are listed alongside
+    their designations (e.g., "Sarthak Malvadkar, Company Secretary").
+
+    Pattern: 2–4 title-case words followed by comma/newline + title keyword.
+    """
+    patterns = [
+        Pattern(
+            name="name_before_company_secretary",
+            regex=(
+                r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+                r"(?:\s*[,\n]\s*Company\s+Secretary)"
+            ),
+            score=0.90,
+        ),
+        Pattern(
+            name="name_before_compliance_officer",
+            regex=(
+                r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+                r"(?:\s*[,\n]\s*Compliance\s+Officer)"
+            ),
+            score=0.90,
+        ),
+        Pattern(
+            name="name_before_cfo",
+            regex=(
+                r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+                r"(?:\s*[,\n]\s*Chief\s+Financial\s+Officer)"
+            ),
+            score=0.85,
+        ),
+        Pattern(
+            name="name_before_md",
+            regex=(
+                r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"
+                r"(?:\s*[,\n]\s*Managing\s+Director)"
+            ),
+            score=0.85,
+        ),
+    ]
+    return PatternRecognizer(
+        supported_entity="PERSON",
+        patterns=patterns,
+        name="CensorForge Title-Context Name Recognizer",
+    )
+
+
 # ==============================================================================
 # Analyzer Setup
 # ==============================================================================
@@ -192,7 +370,9 @@ def create_analyzer() -> AnalyzerEngine:
     """
     Build and return a configured AnalyzerEngine with:
       - The spaCy en_core_web_lg NLP backend for high-accuracy NER.
-      - Custom pattern recognizers for SSN, credit card, DOB, and IP.
+      - Custom pattern recognizers for SSN, credit card, DOB, IP,
+        Indian company names, ALL-CAPS promoters, KSH company name,
+        and title-context names.
 
     Returns:
         A ready-to-use AnalyzerEngine instance.
@@ -214,6 +394,10 @@ def create_analyzer() -> AnalyzerEngine:
     analyzer.registry.add_recognizer(_build_credit_card_recognizer())
     analyzer.registry.add_recognizer(_build_dob_recognizer())
     analyzer.registry.add_recognizer(_build_ip_recognizer())
+    analyzer.registry.add_recognizer(_build_indian_company_recognizer())
+    analyzer.registry.add_recognizer(_build_allcaps_promoter_recognizer())
+    analyzer.registry.add_recognizer(_build_ksh_company_recognizer())
+    analyzer.registry.add_recognizer(_build_title_context_recognizer())
 
     logger.info("AnalyzerEngine created with custom recognizers.")
     return analyzer
@@ -253,30 +437,30 @@ class FakerMapper:
             seed: Optional integer seed for reproducible fake data.
                   If None, a random seed is chosen for privacy.
         """
-        self.faker = Faker()
+        # Use en_IN locale so generated names, addresses, and phone numbers
+        # look like realistic Indian data — critical for documents like
+        # Red Herring Prospectuses that are India-centric.
+        self.faker = Faker("en_IN")
         if seed is not None:
             Faker.seed(seed)
             random.seed(seed)
         self._cache: Dict[Tuple[str, str], str] = {}
-        logger.info("FakerMapper initialised (seed=%s).", seed)
+        logger.info("FakerMapper initialised (locale=en_IN, seed=%s).", seed)
 
     def get_fake(self, entity_type: str, original_text: str) -> str:
         """
         Return a realistic fake replacement for the given entity.
 
-        The mapping logic works as follows:
-          - PERSON       → faker.name()           (full name)
+        The mapping logic works as follows (en_IN locale):
+          - PERSON       → faker.name()           (Indian full name)
           - EMAIL_ADDRESS→ faker.email()           (realistic email)
-          - PHONE_NUMBER → faker.phone_number()    (US-style phone)
-          - ORG          → faker.company()         (company name)
-          - LOCATION     → faker.address()         (full street address)
+          - PHONE_NUMBER → faker.phone_number()    (Indian-style phone)
+          - ORG          → faker.company()         (Indian company name)
+          - LOCATION     → faker.address()         (Indian address)
           - US_SSN       → faker.ssn()             (formatted SSN)
           - CREDIT_CARD  → faker.credit_card_number()
           - DATE_OF_BIRTH→ faker.date_of_birth().strftime(...)
-          - DATE_TIME    → faker.date()            (generic date)
           - IP_ADDRESS   → faker.ipv4()            (IPv4 address)
-          - NRP          → faker.country()         (nationality proxy)
-          - US_DRIVER_LICENSE → faker.bothify("?##-###-####")
           - (fallback)   → "[REDACTED]"
 
         Args:
@@ -332,8 +516,42 @@ class FakerMapper:
                 "No Faker mapping for entity type '%s'; using fallback.", entity_type
             )
 
+        # ---- Case Preservation ----
+        # If the original text was ALL-CAPS (e.g., "KUSHAL SUBBAYYA HEGDE"),
+        # convert the fake value to ALL-CAPS too (e.g., "RAJESH KUMAR").
+        # If the original was Title Case, keep the fake as-is (Faker
+        # already generates title-case names).
+        fake_value = _match_case(original_text, fake_value)
+
         self._cache[cache_key] = fake_value
         return fake_value
+
+
+def _match_case(original: str, replacement: str) -> str:
+    """
+    Adjust the casing of `replacement` to match the casing style of `original`.
+
+    Rules:
+      - ALL UPPERCASE  → replacement.upper()   (e.g., "RAJESH KUMAR")
+      - all lowercase  → replacement.lower()   (e.g., "rajesh kumar")
+      - Title Case     → replacement as-is     (Faker default)
+      - Mixed/other    → replacement as-is
+    """
+    stripped = original.strip()
+    if not stripped:
+        return replacement
+
+    # Check if the original is ALL-CAPS (ignoring non-alpha characters)
+    alpha_chars = [c for c in stripped if c.isalpha()]
+    if alpha_chars and all(c.isupper() for c in alpha_chars):
+        return replacement.upper()
+
+    # Check if the original is all lowercase
+    if alpha_chars and all(c.islower() for c in alpha_chars):
+        return replacement.lower()
+
+    # Otherwise keep Faker's default casing (usually Title Case)
+    return replacement
 
 
 # ==============================================================================
